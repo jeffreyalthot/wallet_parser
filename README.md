@@ -8,7 +8,7 @@ Parser maison de `wallet.dat` **sans** `bsddb3`, **sans** `pywallet`, **sans** B
 - Support de `walletpassphrase` (argument `--walletpassphrase` ou saisie interactive).
 - Option `--out` pour enregistrer le JSON généré.
 - Déchiffrement des `ckey` via `openssl` (AES-256-CBC), sans dépendance Python crypto externe.
-- Pour chaque `ckey` déchiffrée valide, calcul de l'adresse `p2pkh`, de la clé privée hex et du WIF.
+- Pour chaque `ckey` déchiffrée valide, expose `crypted_secret` + `decrypted_crypted_secret`, puis calcule l'adresse `p2pkh`, la clé privée hex et le WIF.
 
 ## Usage
 ```bash

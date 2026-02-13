@@ -182,19 +182,39 @@ def aes256_cbc_decrypt(ciphertext: bytes, key: bytes, iv: bytes) -> bytes:
     return proc.stdout
 
 
+def strip_pkcs7_padding(data: bytes) -> bytes:
+    if not data:
+        return data
+    pad = data[-1]
+    if pad == 0 or pad > 16 or pad > len(data):
+        return data
+    if data[-pad:] != bytes([pad]) * pad:
+        return data
+    return data[:-pad]
+
+
+def normalize_secret32(data: bytes) -> bytes:
+    if len(data) == 32:
+        return data
+    unpadded = strip_pkcs7_padding(data)
+    if len(unpadded) == 32:
+        return unpadded
+    raise ParseError(f"secret déchiffré de taille inattendue: {len(data)}")
+
+
 def decrypt_master_key(mkey_rec: dict[str, Any], passphrase: str) -> bytes:
     salt = bytes.fromhex(mkey_rec["salt"])
     crypted = bytes.fromhex(mkey_rec["crypted_key"])
     iterations = int(mkey_rec["derive_iterations"])
     key, iv = bytes_to_key_sha512_aes(passphrase, salt, iterations)
-    return aes256_cbc_decrypt(crypted, key, iv)
+    return normalize_secret32(aes256_cbc_decrypt(crypted, key, iv))
 
 
 def try_decrypt_ckey(master_key: bytes, ckey_rec: dict[str, Any]) -> bytes:
     pub = bytes.fromhex(ckey_rec["pubkey"])
     iv = hashlib.sha256(hashlib.sha256(pub).digest()).digest()[:16]
     crypted = bytes.fromhex(ckey_rec["crypted_secret"])
-    return aes256_cbc_decrypt(crypted, master_key[:32], iv)
+    return normalize_secret32(aes256_cbc_decrypt(crypted, master_key[:32], iv))
 
 
 def b58encode(data: bytes) -> str:
@@ -273,6 +293,8 @@ def parse_wallet(path: Path, passphrase: str | None = None) -> dict[str, Any]:
                     dec.append(
                         {
                             "pubkey": c["pubkey"],
+                            "crypted_secret": c["crypted_secret"],
+                            "decrypted_crypted_secret": secret.hex(),
                             "address_p2pkh": pubkey_to_p2pkh_address(pubkey),
                             "private_key_hex": secret.hex(),
                             "private_key_wif": private_key_to_wif(secret, compressed=compressed),
