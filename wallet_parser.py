@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Any
 
 
+BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
 class ParseError(Exception):
     pass
 
@@ -194,6 +197,35 @@ def try_decrypt_ckey(master_key: bytes, ckey_rec: dict[str, Any]) -> bytes:
     return aes256_cbc_decrypt(crypted, master_key[:32], iv)
 
 
+def b58encode(data: bytes) -> str:
+    num = int.from_bytes(data, "big")
+    encoded = ""
+    while num > 0:
+        num, rem = divmod(num, 58)
+        encoded = BASE58_ALPHABET[rem] + encoded
+    prefix = "1" * (len(data) - len(data.lstrip(b"\x00")))
+    return prefix + (encoded or "")
+
+
+def b58check(version: bytes, payload: bytes) -> str:
+    raw = version + payload
+    checksum = hashlib.sha256(hashlib.sha256(raw).digest()).digest()[:4]
+    return b58encode(raw + checksum)
+
+
+def pubkey_to_p2pkh_address(pubkey: bytes, testnet: bool = False) -> str:
+    sha = hashlib.sha256(pubkey).digest()
+    ripe = hashlib.new("ripemd160", sha).digest()
+    version = b"\x6f" if testnet else b"\x00"
+    return b58check(version, ripe)
+
+
+def private_key_to_wif(secret32: bytes, compressed: bool, testnet: bool = False) -> str:
+    version = b"\xef" if testnet else b"\x80"
+    payload = secret32 + (b"\x01" if compressed else b"")
+    return b58check(version, payload)
+
+
 def parse_wallet(path: Path, passphrase: str | None = None) -> dict[str, Any]:
     raw = path.read_bytes()
     blobs = parse_db_pages(raw)
@@ -234,7 +266,19 @@ def parse_wallet(path: Path, passphrase: str | None = None) -> dict[str, Any]:
             for c in ckeys:
                 try:
                     secret = try_decrypt_ckey(master, c)
-                    dec.append({"pubkey": c["pubkey"], "secret_hex": secret.hex()})
+                    pubkey = bytes.fromhex(c["pubkey"])
+                    if len(secret) != 32 or len(pubkey) not in (33, 65):
+                        continue
+                    compressed = len(pubkey) == 33
+                    dec.append(
+                        {
+                            "pubkey": c["pubkey"],
+                            "address_p2pkh": pubkey_to_p2pkh_address(pubkey),
+                            "private_key_hex": secret.hex(),
+                            "private_key_wif": private_key_to_wif(secret, compressed=compressed),
+                            "compressed": compressed,
+                        }
+                    )
                 except Exception:
                     continue
             if dec:
