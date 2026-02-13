@@ -8,6 +8,7 @@ Parser maison de `wallet.dat` **sans** `bsddb3`, **sans** `pywallet`, **sans** B
 - Support de `walletpassphrase` (argument `--walletpassphrase` ou saisie interactive).
 - Option `--out` pour enregistrer le JSON généré.
 - Déchiffrement des `ckey` via `openssl` (AES-256-CBC), sans dépendance Python crypto externe.
+- Pour chaque `ckey` déchiffrée valide, calcul de l'adresse `p2pkh`, de la clé privée hex et du WIF.
 
 ## Usage
 ```bash
@@ -23,7 +24,7 @@ python3 wallet_parser.py /chemin/wallet.dat --out resultat.json
 Le JSON inclut:
 - `records`: enregistrements détectés.
 - `decryption`: statut de tentative/succès du déchiffrement.
-- `decrypted_keys` (si succès).
+- `decrypted_keys` (si succès), avec `address_p2pkh`, `private_key_hex`, `private_key_wif` et `compressed`.
 
 ## Limites
 - Le parsing Berkeley DB est volontairement "maison" et heuristique.
